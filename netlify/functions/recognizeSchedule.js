@@ -1,4 +1,4 @@
-// netlify/functions/recognizeSchedule.js 和 recognizeFeedback.js 内容相同
+// netlify/functions/recognizeSchedule.js
 const OpenAI = require('openai');
 
 exports.handler = async (event) => {
@@ -12,21 +12,20 @@ exports.handler = async (event) => {
       return { statusCode: 200, body: JSON.stringify({ text: "" }) };
     }
 
-    const apiKey = process.env.DASHSCOPE_API_KEY;
+    const apiKey = process.env.DEEPSEEK_API_KEY;
     if (!apiKey) {
-      throw new Error('未设置 DASHSCOPE_API_KEY 环境变量');
+      throw new Error('未设置 DEEPSEEK_API_KEY 环境变量');
     }
 
     const openai = new OpenAI({
       apiKey: apiKey,
-      baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1', // 千问兼容接口
+      baseURL: 'https://api.deepseek.com/v1',
     });
 
-    // 构建消息：要求 AI 提取图片中的所有文字
     const content = [
       {
         type: 'text',
-        text: '请提取并输出这张图片中的所有文字内容，不需要任何额外解释，直接输出文字本身。'
+        text: '你是一个OCR助手。请提取图片中的名称、实际开始、实际结束、实际时长这4个数据，按顺序输出并填充到报告中。'
       }
     ];
     for (const base64 of images) {
@@ -37,7 +36,7 @@ exports.handler = async (event) => {
     }
 
     const response = await openai.chat.completions.create({
-      model: 'qwen3-vl-plus',   // 你购买的模型
+      model: 'deepseek-chat',   // DeepSeek 支持图像识别的模型
       messages: [{ role: 'user', content }],
       max_tokens: 4096,
     });
