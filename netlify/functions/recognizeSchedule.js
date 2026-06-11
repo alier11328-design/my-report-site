@@ -37,7 +37,7 @@ exports.handler = async (event) => {
     }
 
     const response = await openai.chat.completions.create({
-      model: 'qwen3.6-plus',   // 你购买的模型
+      model: 'qwen3-vl-plus',   // 你购买的模型
       messages: [{ role: 'user', content }],
       max_tokens: 4096,
     });
