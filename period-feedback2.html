@@ -988,21 +988,15 @@ async function callAIFeedbackExtract() {
     if (!feedbackImages.length) return {};
     try {
         const imagesBase64 = await imagesToBase64(feedbackImages);
-        const response = await fetch('/.netlify/functions/recognizeFeedback', {
+        const response = await fetch('/.netlify/functions/analyzeFeedback', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ images: imagesBase64 })
         });
         const data = await response.json();
-        if (data.text) {
-            alert('识别出的文字内容：\n' + data.text);
-        } else {
-            alert('未识别到文字');
-        }
-        return {};
+        return data;
     } catch (err) {
         console.error(err);
-        alert('识别失败');
         return {};
     }
 }
