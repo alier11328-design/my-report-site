@@ -24,7 +24,24 @@ exports.handler = async (event) => {
     const content = [
       {
         type: 'text',
-        text: '提取图中的课程名称、实际开始、实际结束、实际时长的信息，帮我按时间顺序的顺序整理出来。'
+        text: `你是一个数据提取专家。图片中的表格包含多列信息（预计开始、预计结束、预计时长、实际开始、实际结束、实际时长等）。请只提取每一行的以下四个字段：
+- courseName：课程名称（如 L1, L2）
+- startTime：实际开始时间（格式 YYYY-MM-DD HH:MM，例如 2026-06-09 15:57）
+- endTime：实际结束时间（格式 HH:MM，例如 17:35）
+- duration：实际时长（格式 HH:MM:SS，例如 01:26:43）
+
+注意：如果日期缺失，请根据上下文或表格中的日期推断；如果推断不出，使用最近的日期。
+
+要求：
+1. 只输出一个 JSON 数组，不要有任何额外文字。
+2. 按实际开始时间（startTime）从早到晚排序。
+3. 不要包含预计时间的字段。
+
+示例输出：
+[
+  {"courseName": "L1", "startTime": "2026-06-08 18:04", "endTime": "19:15", "duration": "01:11:00"},
+  {"courseName": "L2", "startTime": "2026-06-09 15:57", "endTime": "17:35", "duration": "01:26:43"}
+]`
       }
     ];
     for (const base64 of images) {

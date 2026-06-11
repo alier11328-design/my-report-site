@@ -962,14 +962,23 @@ async function callAIScheduleExtract() {
         });
         const data = await response.json();
         if (data.text) {
-            alert('识别出的文字内容：\n' + data.text);
-        } else {
-            alert('未识别到文字');
+            // 尝试解析 AI 返回的 JSON 字符串
+            try {
+                const parsed = JSON.parse(data.text);
+                if (Array.isArray(parsed)) {
+                    return parsed;  // 直接返回数组，用于填充表格
+                } else {
+                    console.warn('AI 返回的不是数组', parsed);
+                    return [];
+                }
+            } catch (e) {
+                console.error('JSON 解析失败', data.text);
+                return [];
+            }
         }
-        return [];  // 因为返回的是纯文本，不自动填表，返回空数组
+        return [];
     } catch (err) {
         console.error(err);
-        alert('识别失败');
         return [];
     }
 }
