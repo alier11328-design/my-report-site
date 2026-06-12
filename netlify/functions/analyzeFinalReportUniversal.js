@@ -7,11 +7,7 @@ exports.handler = async (event) => {
   }
 
   try {
-    const { fileBase64, mimeType } = JSON.parse(event.body);
-    if (!fileBase64) {
-      return { statusCode: 400, body: JSON.stringify({ error: '缺少文件' }) };
-    }
-
+    const { fileBase64, mimeType, pdfText } = JSON.parse(event.body);
     const apiKey = process.env.DASHSCOPE_API_KEY;
     if (!apiKey) throw new Error('未设置 DASHSCOPE_API_KEY 环境变量');
 
@@ -20,8 +16,8 @@ exports.handler = async (event) => {
       baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     });
 
-    // 定义通用提示词（要求输出 JSON）
-    const systemPrompt = `你是一个学业报告助手。根据文件内容，提取以下字段（若没有则留空字符串）。输出必须是纯JSON对象，不要有任何额外解释文字。
+    // 通用提示词（要求输出 JSON）
+    const systemPrompt = `你是一个学业报告助手。根据提供的内容，提取以下字段（若没有则留空字符串）。输出必须是纯JSON对象，不要有任何额外解释文字。
 {
   "reportOverview": "报告概述（总结整体学习情况）",
   "learningGoal": "学习目标回顾（学生最初设定的目标）",
@@ -37,7 +33,7 @@ exports.handler = async (event) => {
 }`;
 
     // 1. 处理图片
-    if (mimeType.startsWith('image/')) {
+    if (fileBase64 && mimeType && mimeType.startsWith('image/')) {
       const content = [
         { type: 'text', text: systemPrompt },
         { type: 'image_url', image_url: { url: `data:${mimeType};base64,${fileBase64}` } }
@@ -58,30 +54,15 @@ exports.handler = async (event) => {
       return { statusCode: 200, body: JSON.stringify(result) };
     }
 
-    // 2. 处理 PDF / Word
-    else if (mimeType === 'application/pdf' || mimeType === 'application/msword' || mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-      // 将 Base64 转为 Buffer
-      const buffer = Buffer.from(fileBase64, 'base64');
-      
-      // 上传文件，获取 file_id
-      // 注意：openai.files.create 的 file 参数可以是 Buffer，但需要加上 filename
-      const fileObject = await openai.files.create({
-        file: buffer,
-        purpose: 'file-extract',
-        filename: `upload.${mimeType === 'application/pdf' ? 'pdf' : 'docx'}`
-      });
-      const fileId = fileObject.id;
-
-      // 调用 qwen-long 模型
-      const completion = await openai.chat.completions.create({
+    // 2. 处理文本（来自 PDF 提取）
+    else if (pdfText && pdfText.trim().length > 0) {
+      const userMessage = `以下是文档的文本内容：\n\n${pdfText}\n\n请根据以上内容，${systemPrompt}`;
+      const response = await openai.chat.completions.create({
         model: 'qwen-long',
-        messages: [
-          { role: 'system', content: `请根据文件ID ${fileId} 的内容回答用户的问题。` },
-          { role: 'user', content: systemPrompt }
-        ],
+        messages: [{ role: 'user', content: userMessage }],
         max_tokens: 4096,
       });
-      const resultText = completion.choices[0].message.content;
+      const resultText = response.choices[0].message.content;
       let result = {};
       try {
         let clean = resultText.replace(/```json\s*/g, '').replace(/```\s*/g, '');
@@ -93,10 +74,10 @@ exports.handler = async (event) => {
     }
 
     else {
-      return { statusCode: 400, body: JSON.stringify({ error: '不支持的文件类型，请上传图片、PDF或Word文档' }) };
+      return { statusCode: 400, body: JSON.stringify({ error: '无效的请求，请提供图片或文本内容' }) };
     }
   } catch (error) {
-    console.error(error);
+    console.error('函数执行错误:', error);
     return { statusCode: 500, body: JSON.stringify({ error: 'AI 识别失败：' + error.message }) };
   }
 };

@@ -6,6 +6,11 @@
     <title>万能班长 · 结课报告生成器</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <!-- PDF.js 库，用于提取 PDF 文本 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+    </script>
     <style>
         * {
             margin: 0;
@@ -449,14 +454,14 @@
             <div class="form-section-title">AI 智能填充</div>
             <div class="paste-area" id="aiPasteArea">
                 <i class="fas fa-cloud-upload-alt"></i>
-                <p style="font-weight:600; margin:5px 0;">点击 / 拖拽 / 粘贴截图 (AI将识别填充学习成果、成绩、寄语等)</p>
-                <input type="file" id="imageUpload" accept="image/*" multiple style="display:none;">
+                <p style="font-weight:600; margin:5px 0;">点击 / 拖拽 / 粘贴截图 / PDF</p>
+                <input type="file" id="imageUpload" accept="image/*,application/pdf" multiple style="display:none;">
                 <div id="fileList" class="file-list"></div>
                 <div id="aiStatus" class="status-tip"></div>
             </div>
             <div style="display:flex; gap:10px; margin:10px 0;">
                 <button class="btn btn-primary" id="aiFillBtn"><i class="fas fa-robot"></i> AI 识别填充</button>
-                <button class="btn" id="clearImagesBtn" disabled>清除图片</button>
+                <button class="btn" id="clearImagesBtn" disabled>清除文件</button>
             </div>
 
             <div class="form-group"><label>📋 报告概述</label><textarea id="reportOverview" rows="4"></textarea></div>
@@ -481,7 +486,6 @@
     </div>
 </div>
 
-<script src="./ai-client.js"></script>
 <script>
     (function(){
         let currentTheme = 'red';
@@ -518,64 +522,106 @@
         function onTutorTypeChange() { if (!userEditedOverview) { fields.reportOverview.value = getDynamicOverview(); } renderPreview(); }
         function setupOverviewEditDetection() { fields.reportOverview.addEventListener('input', function() { userEditedOverview = true; }); }
         
-        async function recognizeFinalReportByAI() {
-    if (uploadedImages.length === 0) {
-        alert('请先上传一张图片、PDF或Word文档');
-        return;
-    }
-    const file = uploadedImages[0]; // 只处理第一个文件
-    const statusDiv = document.getElementById('aiStatus');
-    statusDiv.innerText = '⏳ AI 识别中...';
-    try {
-        // 将文件转为 base64（复用现有的压缩函数，对于文档跳过压缩）
-        let base64;
-        if (file.type.startsWith('image/')) {
-            // 图片需要压缩
-            const compressed = await compressImage(file);
-            base64 = await new Promise((resolve) => {
+        // 压缩图片（宽度最大 800px）
+        async function compressImage(file) {
+            return new Promise((resolve) => {
                 const reader = new FileReader();
-                reader.onload = (e) => resolve(e.target.result.split(',')[1]);
-                reader.readAsDataURL(compressed);
-            });
-        } else {
-            // 文档不压缩，直接转 base64
-            base64 = await new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.onload = (e) => resolve(e.target.result.split(',')[1]);
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        let width = img.width;
+                        let height = img.height;
+                        const maxWidth = 800;
+                        if (width > maxWidth) {
+                            height = (height * maxWidth) / width;
+                            width = maxWidth;
+                        }
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+                        canvas.toBlob((blob) => {
+                            resolve(blob);
+                        }, 'image/jpeg', 0.7);
+                    };
+                    img.src = e.target.result;
+                };
                 reader.readAsDataURL(file);
             });
         }
-
-        const response = await fetch('/.netlify/functions/analyzeFinalReportUniversal', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fileBase64: base64, mimeType: file.type })
-        });
-        const data = await response.json();
-
-        // 填充各个字段（如果返回的字段存在）
-        if (data.reportOverview) fields.reportOverview.value = data.reportOverview;
-        if (data.learningGoal) fields.learningGoal.value = data.learningGoal;
-        if (data.achievementSummary) fields.achievementSummary.value = data.achievementSummary;
-        if (data.finalGrade) fields.finalGrade.value = data.finalGrade;
-        if (data.gradeComment) fields.gradeComment.value = data.gradeComment;
-        if (data.teacherMessage) fields.teacherMessage.value = data.teacherMessage;
-        if (data.futureSuggestions) fields.futureSuggestions.value = data.futureSuggestions;
-        if (data.assistantMessage) fields.assistantMessage.value = data.assistantMessage;
-        if (data.attendanceRate) fields.attendanceRate.value = data.attendanceRate;
-        if (data.taskCompletionRate) fields.taskCompletionRate.value = data.taskCompletionRate;
-        if (data.interactionRate) fields.interactionRate.value = data.interactionRate;
-        if (data.performanceDesc) extraContent.performanceDesc = data.performanceDesc;
-
-        renderPreview();
-        statusDiv.innerText = '✅ 完成';
-    } catch (err) {
-        statusDiv.innerText = `❌ ${err.message}`;
-        console.error(err);
-    }
-    setTimeout(() => { if (statusDiv.innerText === '✅ 完成') statusDiv.innerText = ''; }, 2500);
-}
-
+        
+        // 提取 PDF 文本（最多 4000 字符）
+        async function extractPdfText(file, maxChars = 4000) {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            let fullText = '';
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                const pageText = textContent.items.map(item => item.str).join(' ');
+                fullText += pageText + '\n';
+                if (fullText.length >= maxChars) break;
+            }
+            return fullText.slice(0, maxChars);
+        }
+        
+        // AI 识别填充（支持图片和 PDF）
+        async function recognizeFinalReportByAI() {
+            if (uploadedImages.length === 0) {
+                alert('请先上传一张图片或 PDF 文档');
+                return;
+            }
+            const file = uploadedImages[0];
+            const statusDiv = document.getElementById('aiStatus');
+            statusDiv.innerText = '⏳ AI 识别中...';
+            try {
+                let requestBody;
+                if (file.type.startsWith('image/')) {
+                    const compressed = await compressImage(file);
+                    const base64 = await new Promise((resolve) => {
+                        const reader = new FileReader();
+                        reader.onload = (e) => resolve(e.target.result.split(',')[1]);
+                        reader.readAsDataURL(compressed);
+                    });
+                    requestBody = { fileBase64: base64, mimeType: file.type };
+                } else if (file.type === 'application/pdf') {
+                    const pdfText = await extractPdfText(file, 4000);
+                    requestBody = { pdfText: pdfText, mimeType: file.type };
+                } else {
+                    alert('不支持的文件类型，请上传图片或 PDF');
+                    return;
+                }
+                
+                const response = await fetch('/.netlify/functions/analyzeFinalReportUniversal', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody)
+                });
+                const data = await response.json();
+                
+                if (data.reportOverview) fields.reportOverview.value = data.reportOverview;
+                if (data.learningGoal) fields.learningGoal.value = data.learningGoal;
+                if (data.achievementSummary) fields.achievementSummary.value = data.achievementSummary;
+                if (data.finalGrade) fields.finalGrade.value = data.finalGrade;
+                if (data.gradeComment) fields.gradeComment.value = data.gradeComment;
+                if (data.teacherMessage) fields.teacherMessage.value = data.teacherMessage;
+                if (data.futureSuggestions) fields.futureSuggestions.value = data.futureSuggestions;
+                if (data.assistantMessage) fields.assistantMessage.value = data.assistantMessage;
+                if (data.attendanceRate) fields.attendanceRate.value = data.attendanceRate;
+                if (data.taskCompletionRate) fields.taskCompletionRate.value = data.taskCompletionRate;
+                if (data.interactionRate) fields.interactionRate.value = data.interactionRate;
+                if (data.performanceDesc) extraContent.performanceDesc = data.performanceDesc;
+                
+                renderPreview();
+                statusDiv.innerText = '✅ 完成';
+            } catch (err) {
+                statusDiv.innerText = `❌ ${err.message}`;
+                console.error(err);
+            }
+            setTimeout(() => { if (statusDiv.innerText === '✅ 完成') statusDiv.innerText = ''; }, 2500);
+        }
+        
         function renderPreview() {
             const student = fields.studentName.value;
             const order = fields.orderNumber.value;
@@ -603,19 +649,14 @@
             const dynamicTitle = getDynamicTitle(student);
             const watermarkInfo = watermarkMap[currentWatermark];
             let watermarkHtml = watermarkInfo ? `<div class="final-watermark" style="background-image: url('${watermarkInfo.url}');"></div>` : `<div class="final-watermark" style="display:none;"></div>`;
-            
-            // 关键修改：只有版权信息不为 none 时才显示底部栏
             const copyrightText = copyrightMap[currentCopyright];
             let footerHtml = '';
             if (copyrightText && currentCopyright !== 'none') {
                 footerHtml = `<div class="final-footer"><p>${escapeHtml(copyrightText)}</p></div>`;
             }
-
-            // 动态生成基本信息区域
             const hasMajor = majorVal && majorVal.trim() !== '';
             const hasGrade = gradeVal && gradeVal.trim() !== '';
             let leftItems = [], rightItems = [];
-
             if (!hasMajor && !hasGrade) {
                 leftItems = [
                     { label: '学生姓名：', value: student || '—' },
@@ -665,10 +706,8 @@
                     { label: '辅导周期：', value: `${startDate}${startDate && endDate ? ' 至 ' : ''}${endDate}` }
                 ];
             }
-
             const leftHtml = leftItems.map(item => `<div class="final-info-item"><div class="final-info-label">${escapeHtml(item.label)}</div><div>${escapeHtml(item.value)}</div></div>`).join('');
             const rightHtml = rightItems.map(item => `<div class="final-info-item"><div class="final-info-label">${escapeHtml(item.label)}</div><div>${escapeHtml(item.value)}</div></div>`).join('');
-
             const html = `
                 <div class="final-report-card" id="reportForExport">
                     ${watermarkHtml}
@@ -724,14 +763,14 @@
             fileListUrls = [];
             const clearBtn = document.getElementById('clearImagesBtn');
             if (uploadedImages.length === 0) {
-                container.innerHTML = '<div style="color:#94a3b8; text-align:center;">暂无图片</div>';
+                container.innerHTML = '<div style="color:#94a3b8; text-align:center;">暂无文件</div>';
                 if (clearBtn) clearBtn.disabled = true;
             } else {
                 let html = '';
                 uploadedImages.forEach((file, idx) => {
                     const url = URL.createObjectURL(file);
                     fileListUrls.push(url);
-                    html += `<div class="file-item"><i class="far fa-image"></i><span data-url="${url}">${escapeHtml(file.name)} (${formatFileSize(file.size)})</span><i class="fas fa-times" style="cursor:pointer;" data-idx="${idx}"></i></div>`;
+                    html += `<div class="file-item"><i class="far ${file.type.startsWith('image/') ? 'fa-image' : 'fa-file-pdf'}"></i><span data-url="${url}">${escapeHtml(file.name)} (${formatFileSize(file.size)})</span><i class="fas fa-times" style="cursor:pointer;" data-idx="${idx}"></i></div>`;
                 });
                 container.innerHTML = html;
                 if (clearBtn) clearBtn.disabled = false;
