@@ -1,6 +1,6 @@
-import OpenAI from 'openai';
+const OpenAI = require('openai');
 
-export async function onRequest(context) {
+exports.onRequest = async function(context) {
   const { request, env } = context;
 
   if (request.method !== 'POST') {
