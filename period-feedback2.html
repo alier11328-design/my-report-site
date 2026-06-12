@@ -983,28 +983,62 @@ async function imagesToBase64(files) {
 // ========== 排课识别（调用 Netlify 函数） ==========
 async function callAIScheduleExtract() {
     if (!scheduleImages.length) return [];
-    try {
-        const imagesBase64 = await imagesToBase64(scheduleImages);
-        const response = await fetch('/.netlify/functions/recognizeSchedule', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ images: imagesBase64 })
-        });
-        const data = await response.json();
-        if (data.rows && Array.isArray(data.rows)) {
-            return data.rows;
+    
+    // 用于存储所有图片的识别结果
+    let allRows = [];
+    
+    // 依次处理每张图片（串行，避免同时过多请求）
+    for (let i = 0; i < scheduleImages.length; i++) {
+        const file = scheduleImages[i];
+        try {
+            // 将单张图片转为 base64（注意：需要调用单张转换函数，复用已有的 imagesToBase64ForSingle）
+            const base64 = await singleImageToBase64(file);
+            const response = await fetch('/.netlify/functions/recognizeSchedule', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ images: [base64] })  // 只传一张图
+            });
+            const data = await response.json();
+            if (data.rows && Array.isArray(data.rows)) {
+                allRows = allRows.concat(data.rows);
+            } else if (data.text) {
+                // 兼容旧返回格式
+                let jsonStr = data.text.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+                const parsed = JSON.parse(jsonStr);
+                if (Array.isArray(parsed)) allRows = allRows.concat(parsed);
+            }
+        } catch (err) {
+            console.error(`识别第 ${i+1} 张图片失败:`, err);
         }
-        if (data.text) {
-            let jsonStr = data.text;
-            jsonStr = jsonStr.replace(/```json\s*/g, '').replace(/```\s*/g, '');
-            const parsed = JSON.parse(jsonStr);
-            if (Array.isArray(parsed)) return parsed;
-        }
-        return [];
-    } catch (err) {
-        console.error(err);
-        return [];
     }
+    
+    // 去重（可选，根据开始时间和课程名简单去重）
+    const uniqueRows = [];
+    const keySet = new Set();
+    for (const row of allRows) {
+        const key = `${row.courseName}|${row.startTime}|${row.endTime}`;
+        if (!keySet.has(key)) {
+            keySet.add(key);
+            uniqueRows.push(row);
+        }
+    }
+    
+    // 按开始时间排序
+    uniqueRows.sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
+    return uniqueRows;
+}
+
+// 辅助函数：将单个 File 转为 base64（不压缩或沿用原压缩逻辑）
+async function singleImageToBase64(file) {
+    // 如果你希望压缩，可以调用 compressImage 后再转；这里简化，直接使用原逻辑
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            let b64 = e.target.result.split(',')[1];
+            resolve(b64);
+        };
+        reader.readAsDataURL(file);
+    });
 }
 
 // ========== 反馈识别（调用 Netlify 函数） ==========
