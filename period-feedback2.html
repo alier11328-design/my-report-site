@@ -682,7 +682,7 @@
                         <table class="editable-table" id="scheduleTable">
                             <thead><tr><th>课程</th><th>开始时间</th><th>结束时间</th><th>时长</th><th></th></tr></thead>
                             <tbody id="tableBody"></tbody>
-                        </table>
+                        }</table>
 
                         <div class="form-section-title" style="margin-top:30px;"><i class="fas fa-comment-dots"></i> 学习反馈</div>
 
@@ -835,7 +835,7 @@
                     <td><span class="delete-row" data-idx="${idx}"><i class="fas fa-times-circle"></i></span></td>
                 </tr>`;
             });
-            tbody.innerHTML = html || '<tr><td colspan="5" style="padding:12px;text-align:center; color:#94a3b8;">暂无排课，可手动添加或AI识别</td><tr>';
+            tbody.innerHTML = html || '<tr><td colspan="5" style="padding:12px;text-align:center; color:#94a3b8;">暂无排课，可手动添加或AI识别</td></tr>';
         }
 
         function renderPreview() {
@@ -916,7 +916,7 @@
                             <h2 style="color:var(--primary-color); margin-bottom:15px; padding-bottom:8px; border-bottom:1px solid #eee;"><i class="fas fa-calendar-alt"></i> 排课情况</h2>
                             <table class="schedule-table">
                                 <thead><tr><th>课堂名称</th><th>开始时间</th><th>结束时间</th><th>上课时长</th></tr></thead>
-                                <tbody>${rows || '<tr><td colspan="4" style="text-align:center;">暂无排课</td><tr>'}</tbody>
+                                <tbody>${rows || '<tr><td colspan="4" style="text-align:center;">暂无排课</td></tr>'}</tbody>
                             </table>
                         </div>
                         <div class="feedback-block">
@@ -933,130 +933,146 @@
         }
 
         // ========== 新增：图片转 base64 辅助函数 ==========
-// 压缩图片（宽度最大 1200px，质量 0.7）
-async function compressImage(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const img = new Image();
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                let width = img.width;
-                let height = img.height;
-                const maxWidth = 1200;
-                if (width > maxWidth) {
-                    height = (height * maxWidth) / width;
-                    width = maxWidth;
-                }
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, width, height);
-                canvas.toBlob((blob) => {
-                    resolve(blob);
-                }, 'image/jpeg', 0.7);
-            };
-            img.src = e.target.result;
-        };
-        reader.readAsDataURL(file);
-    });
-}
-
-// 将图片文件转为 base64（先压缩）
-async function imagesToBase64(files) {
-    const base64List = [];
-    for (const file of files) {
-        const compressedBlob = await compressImage(file);
-        const base64 = await new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                let b64 = e.target.result.split(',')[1];
-                resolve(b64);
-            };
-            reader.readAsDataURL(compressedBlob);
-        });
-        base64List.push(base64);
-    }
-    return base64List;
-}
-
-// ========== 排课识别（调用 Netlify 函数） ==========
-async function callAIScheduleExtract() {
-    if (!scheduleImages.length) return [];
-    
-    // 用于存储所有图片的识别结果
-    let allRows = [];
-    
-    // 依次处理每张图片（串行，避免同时过多请求）
-    for (let i = 0; i < scheduleImages.length; i++) {
-        const file = scheduleImages[i];
-        try {
-            // 将单张图片转为 base64（注意：需要调用单张转换函数，复用已有的 imagesToBase64ForSingle）
-            const base64 = await singleImageToBase64(file);
-            const response = await fetch('/.netlify/functions/recognizeSchedule', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ images: [base64] })  // 只传一张图
+        // 压缩图片（宽度最大 1200px，质量 0.7）
+        async function compressImage(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        let width = img.width;
+                        let height = img.height;
+                        const maxWidth = 1200;
+                        if (width > maxWidth) {
+                            height = (height * maxWidth) / width;
+                            width = maxWidth;
+                        }
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+                        canvas.toBlob((blob) => {
+                            resolve(blob);
+                        }, 'image/jpeg', 0.7);
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
             });
-            const data = await response.json();
-            if (data.rows && Array.isArray(data.rows)) {
-                allRows = allRows.concat(data.rows);
-            } else if (data.text) {
-                // 兼容旧返回格式
-                let jsonStr = data.text.replace(/```json\s*/g, '').replace(/```\s*/g, '');
-                const parsed = JSON.parse(jsonStr);
-                if (Array.isArray(parsed)) allRows = allRows.concat(parsed);
+        }
+
+        // 将图片文件转为 base64（先压缩）
+        async function imagesToBase64(files) {
+            const base64List = [];
+            for (const file of files) {
+                const compressedBlob = await compressImage(file);
+                const base64 = await new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        let b64 = e.target.result.split(',')[1];
+                        resolve(b64);
+                    };
+                    reader.readAsDataURL(compressedBlob);
+                });
+                base64List.push(base64);
             }
-        } catch (err) {
-            console.error(`识别第 ${i+1} 张图片失败:`, err);
+            return base64List;
         }
-    }
-    
-    // 去重（可选，根据开始时间和课程名简单去重）
-    const uniqueRows = [];
-    const keySet = new Set();
-    for (const row of allRows) {
-        const key = `${row.courseName}|${row.startTime}|${row.endTime}`;
-        if (!keySet.has(key)) {
-            keySet.add(key);
-            uniqueRows.push(row);
+
+        // 辅助函数：将单个 File 转为 base64（不压缩）
+        async function singleImageToBase64(file) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    let b64 = e.target.result.split(',')[1];
+                    resolve(b64);
+                };
+                reader.readAsDataURL(file);
+            });
         }
-    }
-    
-    // 按开始时间排序
-    uniqueRows.sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
-    return uniqueRows;
-}
 
-// 辅助函数：将单个 File 转为 base64（不压缩或沿用原压缩逻辑）
-async function singleImageToBase64(file) {
-    // 如果你希望压缩，可以调用 compressImage 后再转；这里简化，直接使用原逻辑
-    return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            let b64 = e.target.result.split(',')[1];
-            resolve(b64);
-        };
-        reader.readAsDataURL(file);
-    });
-}
+        // ========== 排课识别（调用 Cloudflare Pages 函数） ==========
+        async function callAIScheduleExtract() {
+            if (!scheduleImages.length) return [];
+            
+            let allRows = [];
+            
+            for (let i = 0; i < scheduleImages.length; i++) {
+                const file = scheduleImages[i];
+                try {
+                    const base64 = await singleImageToBase64(file);
+                    const response = await fetch('/functions/recognizeSchedule', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ images: [base64] })
+                    });
+                    const data = await response.json();
+                    if (data.rows && Array.isArray(data.rows)) {
+                        allRows = allRows.concat(data.rows);
+                    } else if (data.text) {
+                        let jsonStr = data.text.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+                        const parsed = JSON.parse(jsonStr);
+                        if (Array.isArray(parsed)) allRows = allRows.concat(parsed);
+                    }
+                } catch (err) {
+                    console.error(`识别第 ${i+1} 张图片失败:`, err);
+                }
+            }
+            
+            const uniqueRows = [];
+            const keySet = new Set();
+            for (const row of allRows) {
+                const key = `${row.courseName}|${row.startTime}|${row.endTime}`;
+                if (!keySet.has(key)) {
+                    keySet.add(key);
+                    uniqueRows.push(row);
+                }
+            }
+            uniqueRows.sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
+            return uniqueRows;
+        }
 
-// ========== 反馈识别（调用 Netlify 函数） ==========
+        // ========== 反馈识别（调用 Cloudflare Pages 函数） ==========
 async function callAIFeedbackExtract() {
     if (!feedbackImages.length) return {};
-    try {
-        const imagesBase64 = await imagesToBase64(feedbackImages);
-        const response = await fetch('/.netlify/functions/analyzeFeedback', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ images: imagesBase64 })
-        });
-        const data = await response.json();
-        return data;
-    } catch (err) {
-        console.error(err);
-        return {};
+    
+    let merged = {
+        performance: '',
+        progress: '',
+        mastery: '',
+        suggestion: ''
+    };
+    
+    for (let i = 0; i < feedbackImages.length; i++) {
+        const file = feedbackImages[i];
+        try {
+            const base64 = await singleImageToBase64(file);
+            const response = await fetch('/functions/analyzeFeedback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ images: [base64] })
+            });
+            const data = await response.json();
+            
+            if (data.performance && data.performance.length > merged.performance.length) {
+                merged.performance = data.performance;
+            }
+            if (data.progress && data.progress.length > merged.progress.length) {
+                merged.progress = data.progress;
+            }
+            if (data.mastery && data.mastery.length > merged.mastery.length) {
+                merged.mastery = data.mastery;
+            }
+            if (data.suggestion && data.suggestion.length > merged.suggestion.length) {
+                merged.suggestion = data.suggestion;
+            }
+        } catch (err) {
+            console.error(`识别第 ${i+1} 张反馈图片失败:`, err);
+        }
     }
+    
+    return merged;
 }
 
         function addImagesToTarget(files, target) {

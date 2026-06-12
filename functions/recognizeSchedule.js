@@ -1,18 +1,22 @@
-// netlify/functions/recognizeSchedule.js
-const OpenAI = require('openai');
+import OpenAI from 'openai';
 
-exports.handler = async (event) => {
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Method Not Allowed' };
+export async function onRequest(context) {
+  const { request, env } = context;
+
+  if (request.method !== 'POST') {
+    return new Response('Method Not Allowed', { status: 405 });
   }
 
   try {
-    const { images } = JSON.parse(event.body);
+    const { images } = await request.json();
     if (!images || images.length === 0) {
-      return { statusCode: 200, body: JSON.stringify({ rows: [] }) };
+      return new Response(JSON.stringify({ rows: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
 
-    const apiKey = process.env.DASHSCOPE_API_KEY;
+    const apiKey = env.DASHSCOPE_API_KEY;
     if (!apiKey) throw new Error('未设置 DASHSCOPE_API_KEY 环境变量');
 
     const openai = new OpenAI({
@@ -69,17 +73,15 @@ exports.handler = async (event) => {
     const response = await openai.chat.completions.create({
       model: 'qwen3-vl-plus',
       messages: [{ role: 'user', content }],
-      max_tokens: 8192,   // 已增大到 8192
+      max_tokens: 8192,
     });
 
     const resultText = response.choices[0].message.content;
     let rows = [];
     try {
-      // 尝试直接解析
       const parsed = JSON.parse(resultText);
       rows = Array.isArray(parsed) ? parsed : [];
     } catch (e) {
-      // 如果失败，尝试去除可能的 markdown 标记后解析
       try {
         let cleanText = resultText.replace(/```json\s*/g, '').replace(/```\s*/g, '');
         const parsed = JSON.parse(cleanText);
@@ -89,15 +91,15 @@ exports.handler = async (event) => {
       }
     }
 
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ rows })
-    };
+    return new Response(JSON.stringify({ rows }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
   } catch (error) {
     console.error(error);
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: '识别失败：' + error.message })
-    };
+    return new Response(JSON.stringify({ error: '识别失败：' + error.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
-};
+}

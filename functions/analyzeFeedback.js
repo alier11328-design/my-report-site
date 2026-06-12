@@ -1,19 +1,24 @@
-// netlify/functions/analyzeFeedback.js
-const OpenAI = require('openai');
+import OpenAI from 'openai';
 
-exports.handler = async (event) => {
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Method Not Allowed' };
+export async function onRequest(context) {
+  const { request, env } = context;
+
+  if (request.method !== 'POST') {
+    return new Response('Method Not Allowed', { status: 405 });
   }
 
   try {
-    const { images, studentName = '该学生', courseName = '课程' } = JSON.parse(event.body);
+    const { images, studentName = '该学生', courseName = '课程' } = await request.json();
     if (!images || images.length === 0) {
-      return { statusCode: 200, body: JSON.stringify({}) };
+      return new Response(JSON.stringify({}), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
 
-    const apiKey = process.env.DASHSCOPE_API_KEY;
+    const apiKey = env.DASHSCOPE_API_KEY;
     if (!apiKey) throw new Error('未设置 DASHSCOPE_API_KEY 环境变量');
+
     const openai = new OpenAI({
       apiKey: apiKey,
       baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
@@ -55,10 +60,20 @@ exports.handler = async (event) => {
 
     const resultText = response.choices[0].message.content;
     let result = {};
-    try { result = JSON.parse(resultText); } catch (e) { console.error(e); }
-    return { statusCode: 200, body: JSON.stringify(result) };
+    try {
+      result = JSON.parse(resultText);
+    } catch (e) {
+      console.error(e);
+    }
+    return new Response(JSON.stringify(result), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
   } catch (error) {
     console.error(error);
-    return { statusCode: 500, body: JSON.stringify({ error: 'AI 识别失败' }) };
+    return new Response(JSON.stringify({ error: 'AI 识别失败' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
-};
+}
