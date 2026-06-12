@@ -32,15 +32,15 @@ exports.handler = async (event) => {
 
 **类型2（旧格式表格）**：
 - 列名包含："名称"、"实际开始"、"实际结束"、"实际时长"
-- 提取字段：courseName（名称），startTime（实际开始），endTime（实际结束），duration（实际时长，直接使用，已经是"XhrYmin"格式，如"1hr5.97min"）
+- 提取字段：courseName（名称），startTime（实际开始），endTime（实际结束），duration（实际时长，直接使用，已经是"XhrYmin"格式）
 
 **统一输出格式要求**：
 1. 所有 startTime 和 endTime 必须输出完整的 "YYYY-MM-DD HH:MM" 格式。
    - 如果原数据中年份只有两位（如"26-05-26"），请补全为"2026-05-26"。
-   - 如果结束时间缺少日期（只有时间），则使用开始时间的日期，并根据时长或常识判断是否跨天（若开始时间较晚且时长较长导致跨天，则日期加1）。
-2. duration 统一输出为 "XhrYmin" 格式（X为整数小时，Y为保留一位小数的分钟）。
+   - 如果结束时间缺少日期（只有时间），则使用开始时间的日期，并根据时长判断是否跨天（若开始时间较晚且时长较长导致跨天，则日期加1）。
+2. duration 统一为 "XhrYmin" 格式（X为整数小时，Y为保留一位小数的分钟）。
 3. 按 startTime 从早到晚排序输出。
-4. 只输出一个 JSON 数组，不要有任何额外解释文字。
+4. **只输出一个纯 JSON 数组，不要有任何额外文字、注释或 Markdown 标记（如 \`\`\`json ... \`\`\`）**。
 5. 如果图片中没有排课信息，返回空数组 []。
 
 **示例输出（类型1）**：
@@ -69,16 +69,24 @@ exports.handler = async (event) => {
     const response = await openai.chat.completions.create({
       model: 'qwen3-vl-plus',
       messages: [{ role: 'user', content }],
-      max_tokens: 4096,
+      max_tokens: 8192,   // 已增大到 8192
     });
 
     const resultText = response.choices[0].message.content;
     let rows = [];
     try {
+      // 尝试直接解析
       const parsed = JSON.parse(resultText);
       rows = Array.isArray(parsed) ? parsed : [];
     } catch (e) {
-      console.error('JSON解析失败', resultText);
+      // 如果失败，尝试去除可能的 markdown 标记后解析
+      try {
+        let cleanText = resultText.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+        const parsed = JSON.parse(cleanText);
+        rows = Array.isArray(parsed) ? parsed : [];
+      } catch (e2) {
+        console.error('JSON解析失败', resultText);
+      }
     }
 
     return {

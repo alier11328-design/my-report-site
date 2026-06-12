@@ -961,20 +961,14 @@ async function callAIScheduleExtract() {
             body: JSON.stringify({ images: imagesBase64 })
         });
         const data = await response.json();
+        if (data.rows && Array.isArray(data.rows)) {
+            return data.rows;
+        }
         if (data.text) {
-            // 尝试解析 AI 返回的 JSON 字符串
-            try {
-                const parsed = JSON.parse(data.text);
-                if (Array.isArray(parsed)) {
-                    return parsed;  // 直接返回数组，用于填充表格
-                } else {
-                    console.warn('AI 返回的不是数组', parsed);
-                    return [];
-                }
-            } catch (e) {
-                console.error('JSON 解析失败', data.text);
-                return [];
-            }
+            let jsonStr = data.text;
+            jsonStr = jsonStr.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+            const parsed = JSON.parse(jsonStr);
+            if (Array.isArray(parsed)) return parsed;
         }
         return [];
     } catch (err) {
