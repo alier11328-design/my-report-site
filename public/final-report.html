@@ -594,7 +594,7 @@
                 }
                 
                 // 关键修改：调用 Cloudflare Pages 函数路径
-                const response = await fetch('/functions/analyzeFinalReportUniversal', {
+                const response = await fetch('/analyzeFinalReportUniversal', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(requestBody)

@@ -1002,7 +1002,7 @@
                 const file = scheduleImages[i];
                 try {
                     const base64 = await singleImageToBase64(file);
-                    const response = await fetch('/functions/recognizeSchedule', {
+                    const response = await fetch('/recognizeSchedule', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ images: [base64] })
@@ -1048,7 +1048,7 @@ async function callAIFeedbackExtract() {
         const file = feedbackImages[i];
         try {
             const base64 = await singleImageToBase64(file);
-            const response = await fetch('/functions/analyzeFeedback', {
+            const response = await fetch('/analyzeFeedback', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ images: [base64] })
