@@ -3,9 +3,9 @@ const OpenAI = require('openai');
 exports.onRequest = async function(context) {
   const { request, env } = context;
 
-  if (request.method !== 'POST') {
+  if (request.method.toUpperCase() !== 'POST') {
     return new Response('Method Not Allowed', { status: 405 });
-  }
+}
 
   try {
     const { fileBase64, mimeType, pdfText } = await request.json();

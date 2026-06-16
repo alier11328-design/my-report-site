@@ -3,9 +3,9 @@ const OpenAI = require('openai');
 exports.onRequest = async function(context) {
   const { request, env } = context;
 
-  if (request.method !== 'POST') {
+  if (request.method.toUpperCase() !== 'POST') {
     return new Response('Method Not Allowed', { status: 405 });
-  }
+}
 
   try {
     const { images, studentName = '该学生', courseName = '课程' } = await request.json();
