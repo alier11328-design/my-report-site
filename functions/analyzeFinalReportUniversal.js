@@ -43,11 +43,19 @@
 
     // 辅助函数：解析 AI 返回的 JSON 文本
     function parseResultText(resultText) {
+      console.log('AI 原始响应:' + ' ' + resultText.substring(0, 200));
       try {
         let clean = resultText.replace(/```json\s*/g, '').replace(/```\s*/g, '');
         return JSON.parse(clean);
       } catch (e) {
-        console.error('JSON 解析失败', resultText);
+        try {
+          const startIdx = resultText.indexOf('{');
+          const endIdx = resultText.lastIndexOf('}');
+          if (startIdx !== -1 && endIdx > startIdx) {
+            return JSON.parse(resultText.substring(startIdx, endIdx + 1));
+          }
+        } catch (e2) {}
+        console.error('JSON 解析全部失败', resultText);
         return {};
       }
     }

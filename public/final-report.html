@@ -600,7 +600,7 @@
                     body: JSON.stringify(requestBody)
                 });
                 if (!response.ok) {
-                    let errorMsg = 服务器返回 ;
+                    let errorMsg = ${response.status};
                     try {
                         const errData = await response.json();
                         if (errData.error) errorMsg = errData.error;
@@ -860,34 +860,6 @@
                 link.href = canvas.toDataURL('image/png');
                 link.click();
             } catch(e) { alert('导出失败：' + e.message); }
-        }
-        
-        function init() {
-            bindInputEvents();
-            setupImageUpload();
-            renderFileList();
-            fields.reportOverview.value = getDynamicOverview();
-            userEditedOverview = false;
-            document.getElementById('tutorTypeSelect').addEventListener('change', onTutorTypeChange);
-            document.getElementById('themeRedBtn').addEventListener('click', () => applyTheme('red'));
-            document.getElementById('themeBlueBtn').addEventListener('click', () => applyTheme('blue'));
-            document.querySelectorAll('.watermark-option').forEach(btn => btn.addEventListener('click', () => setWatermark(btn.getAttribute('data-watermark'))));
-            document.querySelectorAll('.copyright-option').forEach(btn => btn.addEventListener('click', () => setCopyright(btn.getAttribute('data-copyright'))));
-            setupOverviewEditDetection();
-            applyTheme('red');
-            updateWatermarkActiveClass();
-            updateCopyrightActiveClass();
-            renderPreview();
-            document.getElementById('refreshPreviewBtn').addEventListener('click', renderPreview);
-            document.getElementById('exportImageBtn').addEventListener('click', exportImage);
-        }
-        init();
-    })();
-</script>
-</body>
-</html>             link.href = canvas.toDataURL('image/png');
-                link.click();
-            } catch(e) { alert('瀵煎嚭澶辫触锛? + e.message); }
         }
         
         function init() {
