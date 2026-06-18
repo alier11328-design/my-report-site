@@ -74,9 +74,11 @@
         max_tokens: 4096,
       };
       const result = await callDashScope(body);
-      const resultText = result.choices[0].message.content;
+      console.log('API 响应结构:' + JSON.stringify(Object.keys(result)));
+      console.log('choices 类型:' + typeof result.choices);
+      const resultText = (result.choices && result.choices[0] && result.choices[0].message && result.choices[0].message.content) || JSON.stringify(result);
       const parsed = parseResultText(resultText);
-      return new Response(JSON.stringify(parsed), {
+      return new Response(JSON.stringify(Object.assign(parsed, { _debugRawLength: resultText.length, _debugRawPreview: resultText.substring(0, 100) })), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
@@ -91,9 +93,11 @@
         max_tokens: 4096,
       };
       const result = await callDashScope(body);
-      const resultText = result.choices[0].message.content;
+      console.log('API 响应结构:' + JSON.stringify(Object.keys(result)));
+      console.log('choices 类型:' + typeof result.choices);
+      const resultText = (result.choices && result.choices[0] && result.choices[0].message && result.choices[0].message.content) || JSON.stringify(result);
       const parsed = parseResultText(resultText);
-      return new Response(JSON.stringify(parsed), {
+      return new Response(JSON.stringify(Object.assign(parsed, { _debugRawLength: resultText.length, _debugRawPreview: resultText.substring(0, 100) })), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
