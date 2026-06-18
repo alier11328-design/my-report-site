@@ -610,9 +610,8 @@
 
                 const data = await response.json();
                 console.log('AI response data:', data);
-                if (data._debugRawPreview) statusDiv.innerText = 'AI: ' + data._debugRawPreview;
-                
-                if (data.reportOverview) fields.reportOverview.value = data.reportOverview;
+                // Try filling all fields
+                if (data.reportOverview) { fields.reportOverview.value = data.reportOverview; userEditedOverview = true; console.log('FILLED reportOverview'); }
                 if (data.learningGoal) fields.learningGoal.value = data.learningGoal;
                 if (data.achievementSummary) fields.achievementSummary.value = data.achievementSummary;
                 if (data.finalGrade) fields.finalGrade.value = data.finalGrade;
@@ -624,7 +623,6 @@
                 if (data.taskCompletionRate) fields.taskCompletionRate.value = data.taskCompletionRate;
                 if (data.interactionRate) fields.interactionRate.value = data.interactionRate;
                 if (data.performanceDesc) extraContent.performanceDesc = data.performanceDesc;
-                
                 renderPreview();
                 statusDiv.innerText = '✅ 完成';
             } catch (err) {
