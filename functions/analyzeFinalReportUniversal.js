@@ -1,4 +1,4 @@
-﻿export async function onRequest(context) {
+﻿﻿export async function onRequest(context) {
   const { request, env } = context;
 
   try {
@@ -87,7 +87,7 @@
     // ---- 处理 PDF 文本 ----
     else if (pdfText && pdfText.trim().length > 0) {
       const body = {
-        model: 'qwen-long',
+        model: 'qwen-max',
         messages: [
           { role: 'user', content: systemPrompt + '\n\n以下是文档的文本内容：\n\n' + pdfText + '\n\n请根据以上内容提取上述JSON字段。' }
 
