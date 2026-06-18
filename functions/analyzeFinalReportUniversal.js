@@ -65,7 +65,7 @@
       const body = {
         model: 'qwen3-vl-plus',
         messages: [{
-          role: 'user',
+        role: 'user',
           content: [
             { type: 'text', text: systemPrompt },
             { type: 'image_url', image_url: { url: `data:${mimeType};base64,${fileBase64}` } },
@@ -76,7 +76,7 @@
       const result = await callDashScope(body);
       console.log('API 响应结构:' + JSON.stringify(Object.keys(result)));
       console.log('choices 类型:' + typeof result.choices);
-      const resultText = (result.choices && result.choices[0] && result.choices[0].message && result.choices[0].message.content) || JSON.stringify(result);
+      const resultText = (result.choices && result.choices[0] && result.choices[0].message && typeof result.choices[0].message.content === 'string') ? result.choices[0].message.content : '';
       const parsed = parseResultText(resultText);
       return new Response(JSON.stringify(Object.assign(parsed, { _debugRawLength: resultText.length, _debugRawPreview: resultText.substring(0, 100) })), {
         status: 200,
@@ -86,16 +86,18 @@
 
     // ---- 处理 PDF 文本 ----
     else if (pdfText && pdfText.trim().length > 0) {
-      const userMessage = `以下是文档的文本内容：\n\n${pdfText}\n\n请根据以上内容，${systemPrompt}`;
       const body = {
         model: 'qwen-long',
-        messages: [{ role: 'user', content: userMessage }],
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: '以下是文档的文本内容：\n\n' + pdfText + '\n\n请根据以上内容提取上述JSON字段。' }
+        ],
         max_tokens: 4096,
       };
       const result = await callDashScope(body);
       console.log('API 响应结构:' + JSON.stringify(Object.keys(result)));
       console.log('choices 类型:' + typeof result.choices);
-      const resultText = (result.choices && result.choices[0] && result.choices[0].message && result.choices[0].message.content) || JSON.stringify(result);
+      const resultText = (result.choices && result.choices[0] && result.choices[0].message && typeof result.choices[0].message.content === 'string') ? result.choices[0].message.content : '';
       const parsed = parseResultText(resultText);
       return new Response(JSON.stringify(Object.assign(parsed, { _debugRawLength: resultText.length, _debugRawPreview: resultText.substring(0, 100) })), {
         status: 200,
