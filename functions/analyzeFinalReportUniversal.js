@@ -76,7 +76,7 @@
       const result = await callDashScope(body);
       console.log('API 响应结构:' + JSON.stringify(Object.keys(result)));
       console.log('choices 类型:' + typeof result.choices);
-      const resultText = (result.choices && result.choices[0] && result.choices[0].message && typeof result.choices[0].message.content === 'string') ? result.choices[0].message.content : '';
+      console.log('消息结构:', JSON.stringify(result.choices[0].message));
       const parsed = parseResultText(resultText);
       return new Response(JSON.stringify(Object.assign(parsed, { _debugRawLength: resultText.length, _debugRawPreview: resultText.substring(0, 100) })), {
         status: 200,
@@ -97,7 +97,7 @@
       const result = await callDashScope(body);
       console.log('API 响应结构:' + JSON.stringify(Object.keys(result)));
       console.log('choices 类型:' + typeof result.choices);
-      const resultText = (result.choices && result.choices[0] && result.choices[0].message && typeof result.choices[0].message.content === 'string') ? result.choices[0].message.content : '';
+      console.log('消息结构:', JSON.stringify(result.choices[0].message));
       const parsed = parseResultText(resultText);
       return new Response(JSON.stringify(Object.assign(parsed, { _debugRawLength: resultText.length, _debugRawPreview: resultText.substring(0, 100) })), {
         status: 200,
