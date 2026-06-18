@@ -1,22 +1,12 @@
-const OpenAI = require('openai');
-
-exports.onRequest = async function(context) {
+﻿export async function onRequest(context) {
   const { request, env } = context;
-
-  // 注释掉方法检查，允许所有请求（测试用）
-// if (request.method.toUpperCase() !== 'POST') {
-//     return new Response('Method Not Allowed', { status: 405 });
-// }
 
   try {
     const { fileBase64, mimeType, pdfText } = await request.json();
     const apiKey = env.DASHSCOPE_API_KEY;
     if (!apiKey) throw new Error('未设置 DASHSCOPE_API_KEY 环境变量');
 
-    const openai = new OpenAI({
-      apiKey: apiKey,
-      baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-    });
+    const baseURL = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
 
     const systemPrompt = `你是一个学业报告助手。根据提供的内容，提取以下字段（若没有则留空字符串）。输出必须是纯JSON对象，不要有任何额外解释文字。
 {
@@ -33,53 +23,75 @@ exports.onRequest = async function(context) {
   "interactionRate": "课堂互动率（如 85%）"
 }`;
 
-    // 处理图片
-    if (fileBase64 && mimeType && mimeType.startsWith('image/')) {
-      const content = [
-        { type: 'text', text: systemPrompt },
-        { type: 'image_url', image_url: { url: `data:${mimeType};base64,${fileBase64}` } }
-      ];
-      const response = await openai.chat.completions.create({
-        model: 'qwen3-vl-plus',
-        messages: [{ role: 'user', content }],
-        max_tokens: 4096,
+    // 辅助函数：调用 DashScope API
+    async function callDashScope(body) {
+      const resp = await fetch(baseURL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(body),
       });
-      const resultText = response.choices[0].message.content;
-      let result = {};
+      if (!resp.ok) {
+        const errText = await resp.text();
+        throw new Error(`DashScope API 返回 ${resp.status}: ${errText}`);
+      }
+      const json = await resp.json();
+      return json;
+    }
+
+    // 辅助函数：解析 AI 返回的 JSON 文本
+    function parseResultText(resultText) {
       try {
         let clean = resultText.replace(/```json\s*/g, '').replace(/```\s*/g, '');
-        result = JSON.parse(clean);
+        return JSON.parse(clean);
       } catch (e) {
-        console.error('JSON解析失败', resultText);
+        console.error('JSON 解析失败', resultText);
+        return {};
       }
-      return new Response(JSON.stringify(result), {
+    }
+
+    // ---- 处理图片 ----
+    if (fileBase64 && mimeType && mimeType.startsWith('image/')) {
+      const body = {
+        model: 'qwen3-vl-plus',
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: systemPrompt },
+            { type: 'image_url', image_url: { url: `data:${mimeType};base64,${fileBase64}` } },
+          ],
+        }],
+        max_tokens: 4096,
+      };
+      const result = await callDashScope(body);
+      const resultText = result.choices[0].message.content;
+      const parsed = parseResultText(resultText);
+      return new Response(JSON.stringify(parsed), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
-    // 处理 PDF 文本
+    // ---- 处理 PDF 文本 ----
     else if (pdfText && pdfText.trim().length > 0) {
       const userMessage = `以下是文档的文本内容：\n\n${pdfText}\n\n请根据以上内容，${systemPrompt}`;
-      const response = await openai.chat.completions.create({
+      const body = {
         model: 'qwen-long',
         messages: [{ role: 'user', content: userMessage }],
         max_tokens: 4096,
-      });
-      const resultText = response.choices[0].message.content;
-      let result = {};
-      try {
-        let clean = resultText.replace(/```json\s*/g, '').replace(/```\s*/g, '');
-        result = JSON.parse(clean);
-      } catch (e) {
-        console.error('JSON解析失败', resultText);
-      }
-      return new Response(JSON.stringify(result), {
+      };
+      const result = await callDashScope(body);
+      const resultText = result.choices[0].message.content;
+      const parsed = parseResultText(resultText);
+      return new Response(JSON.stringify(parsed), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
+    // ---- 无效请求 ----
     else {
       return new Response(JSON.stringify({ error: '无效的请求，请提供图片或文本内容' }), {
         status: 400,
