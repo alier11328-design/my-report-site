@@ -44,8 +44,9 @@
     // 辅助函数：解析 AI 返回的 JSON 文本
     function parseResultText(resultText) {
       console.log('AI 原始响应:' + ' ' + resultText.substring(0, 200));
+      if (!resultText || resultText.trim() === '') { console.log('AI 响应为空，返回默认对象'); return {}; }
       try {
-        let clean = resultText.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+        let clean = resultText.replace(/`json\s*/g, '').replace(/`\s*/g, '');
         return JSON.parse(clean);
       } catch (e) {
         try {
@@ -55,13 +56,12 @@
             return JSON.parse(resultText.substring(startIdx, endIdx + 1));
           }
         } catch (e2) {}
-        console.error('JSON 解析全部失败', resultText);
+        console.log('JSON 解析全部失败:', resultText);
         return {};
       }
     }
-
-    // ---- 处理图片 ----
-    if (fileBase64 && mimeType && mimeType.startsWith('image/')) {
+    // end parseResultText
+    // end parseResultText
       const body = {
         model: 'qwen3-vl-plus',
         messages: [{
