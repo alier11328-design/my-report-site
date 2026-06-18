@@ -1,13 +1,10 @@
 ﻿export async function onRequest(context) {
   const { request, env } = context;
-
   try {
     const { fileBase64, mimeType, pdfText } = await request.json();
     const apiKey = env.DASHSCOPE_API_KEY;
     if (!apiKey) throw new Error('未设置 DASHSCOPE_API_KEY 环境变量');
-
-    const baseURL = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
-
+    const NATIVE_API = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation';
     const systemPrompt = `你是一个学业报告助手。根据提供的内容，提取以下字段（若没有则留空字符串）。输出必须是纯JSON对象，不要有任何额外解释文字。
 {
   "reportOverview": "报告概述（总结整体学习情况）",
@@ -22,28 +19,16 @@
   "taskCompletionRate": "任务完成率（如 90%）",
   "interactionRate": "课堂互动率（如 85%）"
 }`;
-
     // 辅助函数：调用 DashScope API
-    async function callDashScope(body) {
-      const resp = await fetch(baseURL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify(body),
-      });
-      if (!resp.ok) {
-        const errText = await resp.text();
-        throw new Error(`DashScope API 返回 ${resp.status}: ${errText}`);
-      }
+    async function callDashScopeNative(modelName, msgList) {
+      const resp = await fetch(NATIVE_API, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey }, body: JSON.stringify({ model: modelName, input: { messages: msgList }, parameters: { max_tokens: 4096, result_format: 'message' } }) });
+      if (!resp.ok) { const errText = await resp.text(); throw new Error('DashScope 返回 ' + resp.status + ': ' + errText); }
       const json = await resp.json();
-      return json;
+      if (!json.output || !json.output.choices || !json.output.choices[0]) throw new Error('API 响应格式异常: ' + JSON.stringify(json));
+      return json.output.choices[0].message.content || '';
     }
-
     // 辅助函数：解析 AI 返回的 JSON 文本
     function parseResultText(resultText) {
-      if (!resultText || resultText.trim() === '') { console.log('AI 响应为空,返回默认对象'); return {}; }
       console.log('AI 原始响应:' + ' ' + resultText.substring(0, 200));
       try {
         let clean = resultText.replace(/```json\s*/g, '').replace(/```\s*/g, '');
@@ -56,56 +41,30 @@
             return JSON.parse(resultText.substring(startIdx, endIdx + 1));
           }
         } catch (e2) {}
-        console.log('JSON 解析全部失败:', resultText);
+        console.error('JSON 解析全部失败', resultText);
         return {};
       }
     }
-
     // ---- 处理图片 ----
     if (fileBase64 && mimeType && mimeType.startsWith('image/')) {
-      const body = {
-        model: 'qwen3-vl-plus',
-        messages: [{
-        role: 'user',
-          content: [
-            { type: 'text', text: systemPrompt },
-            { type: 'image_url', image_url: { url: `data:${mimeType};base64,${fileBase64}` } },
-          ],
-        }],
-        max_tokens: 4096,
-      };
-      const result = await callDashScope(body);
-      console.log('API 响应结构:' + JSON.stringify(Object.keys(result)));
-      console.log('choices 类型:' + typeof result.choices);
-      console.log('消息结构:', JSON.stringify(result.choices[0].message));
+      const msgList = [{ role: 'system', content: systemPrompt }, { role: 'user', content: [{ type: 'text', text: '请分析图片并提取JSON字段' }, { type: 'image_url', image_url: { url: 'data:' + mimeType + ';base64,' + fileBase64 } }] }];
+      const resultText = await callDashScopeNative('qwen3-vl-plus', msgList);
       const parsed = parseResultText(resultText);
       return new Response(JSON.stringify(Object.assign(parsed, { _debugRawLength: resultText.length, _debugRawPreview: resultText.substring(0, 100) })), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
     }
-
     // ---- 处理 PDF 文本 ----
     else if (pdfText && pdfText.trim().length > 0) {
-      const body = {
-        model: 'qwen-max',
-        messages: [
-          { role: 'user', content: systemPrompt + '\n\n以下是文档的文本内容：\n\n' + pdfText + '\n\n请根据以上内容提取上述JSON字段。' }
-
-        ],
-        max_tokens: 4096,
-      };
-      const result = await callDashScope(body);
-      console.log('API 响应结构:' + JSON.stringify(Object.keys(result)));
-      console.log('choices 类型:' + typeof result.choices);
-      console.log('消息结构:', JSON.stringify(result.choices[0].message));
+      const msgList = [{ role: 'system', content: systemPrompt }, { role: 'user', content: '以下是文档的文本内容:\n' + pdfText + '\n\n请根据以上内容提取上述JSON字段。' }];
+      const resultText = await callDashScopeNative('qwen-max', msgList);
       const parsed = parseResultText(resultText);
       return new Response(JSON.stringify(Object.assign(parsed, { _debugRawLength: resultText.length, _debugRawPreview: resultText.substring(0, 100) })), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
     }
-
     // ---- 无效请求 ----
     else {
       return new Response(JSON.stringify({ error: '无效的请求，请提供图片或文本内容' }), {
