@@ -4,79 +4,44 @@
     const { fileBase64, mimeType, pdfText } = await request.json();
     const apiKey = env.DASHSCOPE_API_KEY;
     if (!apiKey) throw new Error('未设置 DASHSCOPE_API_KEY 环境变量');
+
     const NATIVE_API = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation';
-    const systemPrompt = `你是一个学业报告助手。根据提供的内容，提取以下字段（若没有则留空字符串）。输出必须是纯JSON对象，不要有任何额外解释文字。
-{
-  "reportOverview": "报告概述（总结整体学习情况）",
-  "learningGoal": "学习目标回顾（学生最初设定的目标）",
-  "achievementSummary": "学习成果总结（达到了什么成果）",
-  "finalGrade": "总成绩/等级（如 78分 或 B+）",
-  "gradeComment": "成绩评语（对成绩的评价）",
-  "teacherMessage": "讲师寄语（老师对学生的寄语）",
-  "futureSuggestions": "下学期学习建议",
-  "assistantMessage": "教辅寄语",
-  "attendanceRate": "出勤率（如 95%）",
-  "taskCompletionRate": "任务完成率（如 90%）",
-  "interactionRate": "课堂互动率（如 85%）"
-}`;
-    // 辅助函数：调用 DashScope API
+    
+    const systemPrompt = '你是一个学业报告助手。根据提供的内容，提取以下字段（若没有则留空字符串）。输出必须是纯JSON对象，不要有任何额外解释文字。\n{\n  "reportOverview": "报告概述（总结整体学习情况）",\n  "learningGoal": "学习目标回顾（学生最初设定的目标）",\n  "achievementSummary": "学习成果总结（达到了什么成果）",\n  "finalGrade": "总成绩/等级（如 78分 或 B+）",\n  "gradeComment": "成绩评语（对成绩的评价）",\n  "teacherMessage": "讲师寄语（老师对学生的寄语）",\n  "futureSuggestions": "下学期学习建议",\n  "assistantMessage": "教辅寄语",\n  "attendanceRate": "出勤率（如 95%）",\n  "taskCompletionRate": "任务完成率（如 90%）",\n  "interactionRate": "课堂互动率（如 85%）"\n}';
+
     async function callDashScopeNative(modelName, msgList) {
-      const resp = await fetch(NATIVE_API, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey }, body: JSON.stringify({ model: modelName, input: { messages: msgList }, parameters: { max_tokens: 4096, result_format: 'message' } }) });
+      const resp = await fetch(NATIVE_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+        body: JSON.stringify({ model: modelName, input: { messages: msgList }, parameters: { max_tokens: 4096, result_format: 'message' } })
+      });
       if (!resp.ok) { const errText = await resp.text(); throw new Error('DashScope 返回 ' + resp.status + ': ' + errText); }
       const json = await resp.json();
       if (!json.output || !json.output.choices || !json.output.choices[0]) throw new Error('API 响应格式异常: ' + JSON.stringify(json));
       return json.output.choices[0].message.content || '';
     }
-    // 辅助函数：解析 AI 返回的 JSON 文本
-    function parseResultText(resultText) {
-      console.log('AI 原始响应:' + ' ' + resultText.substring(0, 200));
-      try {
-        let clean = resultText.replace(/```json\s*/g, '').replace(/```\s*/g, '');
-        return JSON.parse(clean);
-      } catch (e) {
-        try {
-          const startIdx = resultText.indexOf('{');
-          const endIdx = resultText.lastIndexOf('}');
-          if (startIdx !== -1 && endIdx > startIdx) {
-            return JSON.parse(resultText.substring(startIdx, endIdx + 1));
-          }
-        } catch (e2) {}
-        console.error('JSON 解析全部失败', resultText);
+
+    function parseResultText(t) {
+      if (!t || t.trim() === '') { console.log('AI 响应为空,返回默认对象'); return {}; }
+      try { return JSON.parse(t.replace(/```json\s*/g,'').replace(/```\s*/g,'')); } catch (e) {
+        try { var a=t.indexOf('{'),b=t.lastIndexOf('}'); if(a>-1&&b>a) return JSON.parse(t.substring(a,b+1)); } catch(e2){}
         return {};
       }
     }
-    // ---- 处理图片 ----
+
     if (fileBase64 && mimeType && mimeType.startsWith('image/')) {
-      const msgList = [{ role: 'system', content: systemPrompt }, { role: 'user', content: [{ type: 'text', text: '请分析图片并提取JSON字段' }, { type: 'image_url', image_url: { url: 'data:' + mimeType + ';base64,' + fileBase64 } }] }];
-      const resultText = await callDashScopeNative('qwen3-vl-plus', msgList);
-      const parsed = parseResultText(resultText);
-      return new Response(JSON.stringify(Object.assign(parsed, { _debugRawLength: resultText.length, _debugRawPreview: resultText.substring(0, 100) })), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      var r = await callDashScopeNative('qwen3-vl-plus', [{role:'system',content:systemPrompt},{role:'user',content:'请分析图片内容并提取JSON字段'}]);
+      return new Response(JSON.stringify(Object.assign(parseResultText(r),{_dbg:r.substring(0,100)})),{status:200,headers:{'Content-Type':'application/json'}});
     }
-    // ---- 处理 PDF 文本 ----
+
     else if (pdfText && pdfText.trim().length > 0) {
-      const msgList = [{ role: 'system', content: systemPrompt }, { role: 'user', content: '以下是文档的文本内容:\n' + pdfText + '\n\n请根据以上内容提取上述JSON字段。' }];
-      const resultText = await callDashScopeNative('qwen-max', msgList);
-      const parsed = parseResultText(resultText);
-      return new Response(JSON.stringify(Object.assign(parsed, { _debugRawLength: resultText.length, _debugRawPreview: resultText.substring(0, 100) })), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      var r = await callDashScopeNative('qwen-max', [{role:'system',content:systemPrompt},{role:'user',content:'以下是文档的文本内容：\n' + pdfText + '\n\n请根据以上内容提取上述JSON字段。'}]);
+      return new Response(JSON.stringify(Object.assign(parseResultText(r),{_dbg:r.substring(0,100)})),{status:200,headers:{'Content-Type':'application/json'}});
     }
-    // ---- 无效请求 ----
-    else {
-      return new Response(JSON.stringify({ error: '无效的请求，请提供图片或文本内容' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
+
+    else { return new Response(JSON.stringify({error:'无效请求'}),{status:400,headers:{'Content-Type':'application/json'}}); }
   } catch (error) {
-    console.error('函数执行错误:', error);
-    return new Response(JSON.stringify({ error: 'AI 识别失败：' + error.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    console.error('函数错误:', error);
+    return new Response(JSON.stringify({error:'AI 识别失败：' + error.message}),{status:500,headers:{'Content-Type':'application/json'}});
   }
 }
