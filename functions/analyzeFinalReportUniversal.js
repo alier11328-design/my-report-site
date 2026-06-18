@@ -89,8 +89,8 @@
       const body = {
         model: 'qwen-long',
         messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: '以下是文档的文本内容：\n\n' + pdfText + '\n\n请根据以上内容提取上述JSON字段。' }
+          { role: 'user', content: systemPrompt + '\n\n以下是文档的文本内容：\n\n' + pdfText + '\n\n请根据以上内容提取上述JSON字段。' }
+
         ],
         max_tokens: 4096,
       };
